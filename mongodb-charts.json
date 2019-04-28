@@ -1,0 +1,204 @@
+{
+  "apiVersion": "v1",
+  "kind": "Template",
+  "labels": {
+    "template": "mongodb-charts"
+  },
+  "message": "MongoDB Charts deployed",
+  "metadata": {
+    "annotations": {
+      "description": "Launch MongoDB Charts",
+      "iconClass": "icon-mongodb",
+      "openshift.io/display-name": "MongoDB Charts (unsupported)",
+      "openshift.io/documentation-url": "https://docs.mongodb.com/charts/master/",
+      "openshift.io/long-description": "This template defines resources to run MongoDB Charts",
+      "openshift.io/provider-display-name": "Jack Alder",
+      "openshift.io/support-url": "https://jalder.dev",
+      "tags": "mongodb,charts"
+    },
+    "name": "mongodb-charts"
+  },
+  "objects": [
+    {
+      "apiVersion": "v1",
+      "kind": "Secret",
+      "metadata": {
+        "name": "${NAME}"
+      },
+      "stringData": {
+        "charts-mongodb-uri": "${CHARTS_MONGODB_URI}"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "${NAME}-data-keys"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "1Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "annotations": {
+          "description": "Exposes the Charts application"
+        },
+        "name": "${NAME}"
+      },
+      "spec": {
+        "ports": [
+          {
+            "name": "web",
+            "port": 80,
+            "targetPort": 80
+          }
+        ],
+        "selector": {
+          "name": "${NAME}"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Route",
+      "metadata": {
+        "annotations": {
+          "template.openshift.io/expose-uri": "http://{.spec.host}{.spec.path}"
+        },
+        "name": "${NAME}"
+      },
+      "spec": {
+        "host": "${APPLICATION_DOMAIN}",
+        "to": {
+          "kind": "Service",
+          "name": "${NAME}"
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ReplicationController",
+      "metadata": {
+        "annotations": {
+          "description": "Launches the Charts application"
+        },
+        "name": "${NAME}"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "name": "${NAME}"
+        },
+        "strategy": {
+          "type": "Rolling"
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "name": "${NAME}"
+            },
+            "name": "${NAME}"
+          },
+          "spec": {
+            "containers": [
+              {
+                "env": [
+                  {
+                    "name": "CHARTS_SUPPORT_WIDGET_AND_METRICS",
+                    "value": "on"
+                  },
+                  {
+                    "name": "SSL_CERT_DIR",
+                    "value": "/mongodb-charts/volumes/db-certs"
+                  },
+                  {
+                    "name": "CHARTS_MONGODB_URI",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "key": "charts-mongodb-uri",
+                        "name": "${NAME}"
+                      }
+                    }
+                  }
+                ],
+                "image": "quay.io/mongodb/charts:${CHARTS_VERSION}",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "mongodb-charts",
+                "ports": [
+                  {
+                    "containerPort": 80,
+                    "protocol": "TCP"
+                  },
+                  {
+                    "containerPort": 443,
+                    "protocol": "TCP"
+                  }
+                ],
+                "volumeMounts": [
+                  {
+                    "mountPath": "/mongodb-charts/volumes/keys",
+                    "name": "${NAME}-data-keys"
+                  },
+                  {
+                    "mountPath": "/mongodb-charts/volumes/logs",
+                    "name": "${NAME}-data-logs"
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "${NAME}-data-keys",
+                "persistentVolumeClaim": {
+                  "claimName": "${NAME}-data-keys"
+                }
+              },
+              {
+                "name": "${NAME}-data-logs"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "parameters": [
+    {
+      "description": "The name assigned to the mongodb charts objects in this template",
+      "displayName": "Name",
+      "name": "NAME",
+      "required": true,
+      "value": "mongodb-charts"
+    },
+    {
+      "description": "Version of MongoDB Charts to use. v0.12.0 by default. Refer to quay.io for available versions. Tag latest may be used as well.",
+      "displayName": "Charts Version",
+      "name": "CHARTS_VERSION",
+      "required": true,
+      "value":  "v0.12.0"
+    },
+    {
+      "description": "The exposed hostname that will route to the charts application, if left blank a value will be defaulted.",
+      "displayName": "Charts Hostname",
+      "name": "APPLICATION_DOMAIN",
+      "value": ""
+    },
+    {
+      "description": "The MongoDB connection URI for Charts MetaData storage.",
+      "displayName": "MongoDB URI",
+      "name": "CHARTS_MONGODB_URI",
+      "required": true,
+      "value": "mongodb://localhost:27017"
+    }
+  ]
+}
